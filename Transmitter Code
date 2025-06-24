@@ -1,0 +1,87 @@
+Transmitter code :-
+#define PIEZO_PIN 35      // ADC pin
+#define BUZZER_PIN 25     // Buzzer pin
+#define LORA_RX 16
+#define LORA_TX 17
+
+HardwareSerial LoRaSerial(1);
+
+const int weightThreshold = 2000;    // ADC cutoff
+const int detectionWindow = 5000;    // Detection duration (ms)
+const int readInterval = 100;        // Sensor read interval (ms)
+const int buzzDuration = 500;        // Buzzer ON time (ms)
+
+unsigned long lastReadTime = 0;
+unsigned long windowStartTime = 0;
+int peakValue = 0;
+bool inDetectionWindow = false;
+
+void setup() {
+  Serial.begin(115200);
+  LoRaSerial.begin(115200, SERIAL_8N1, LORA_RX, LORA_TX);
+
+  delay(2000); // Wait for module to boot
+
+  // Configure LoRa module
+  LoRaSerial.println("AT+ADDRESS=1");
+  delay(200);
+  LoRaSerial.println("AT+NETWORKID=5");
+  delay(200);
+  LoRaSerial.println("AT+BAND=865000000");
+  delay(200);
+
+  pinMode(PIEZO_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  Serial.println("LoRa Transmitter with Buzzer Configured");
+}
+
+void loop() {
+  unsigned long currentTime = millis();
+
+  // Start new detection window
+  if (!inDetectionWindow) {
+    inDetectionWindow = true;
+    windowStartTime = currentTime;
+    peakValue = 0;
+    Serial.println("[Cycle Started] Tracking for 5 seconds...");
+  }
+
+  // Read piezo value every 100 ms
+  if (currentTime - lastReadTime >= readInterval) {
+    lastReadTime = currentTime;
+
+    int piezoValue = analogRead(PIEZO_PIN);
+    if (piezoValue > peakValue) {
+      peakValue = piezoValue;
+    }
+  }
+
+  // End of detection window
+  if (inDetectionWindow && currentTime - windowStartTime >= detectionWindow) {
+    inDetectionWindow = false;
+    Serial.print("[Cycle Ended] Peak Value: ");
+    Serial.println(peakValue);
+
+    // LoRa send
+    String message = String(peakValue);
+    String atCommand = "AT+SEND=2," + String(message.length()) + "," + message + "\r\n";
+    LoRaSerial.print(atCommand);
+    Serial.print("Sent via LoRa: ");
+    Serial.println(message);
+
+    // Buzzer logic
+    if (peakValue >= weightThreshold) {
+      Serial.println("→ Classification: OVERWEIGHT");
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(buzzDuration);
+      digitalWrite(BUZZER_PIN, LOW);
+    } else {
+      Serial.println("→ Classification: UNDERWEIGHT");
+    }
+
+    Serial.println();
+    delay(1000); // Small delay before next cycle
+  }
+}
