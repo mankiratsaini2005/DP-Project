@@ -1,0 +1,71 @@
+Reciver code :-
+
+#define LORA_RX 16
+#define LORA_TX 17
+
+// Blynk credentials
+#define BLYNK_TEMPLATE_ID "TMPL3sQWjWt65"
+#define BLYNK_TEMPLATE_NAME "pie"
+#define BLYNK_AUTH_TOKEN "TZ_ySfS4U3jJkr4kCDq-Xt9tIQMe6l7a"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "Risa's";
+char pass[] = "bonjourpeacock";
+
+HardwareSerial LoRaSerial(1);
+
+const int weightThreshold = 2000;
+
+void setup() {
+  Serial.begin(115200);
+  LoRaSerial.begin(115200, SERIAL_8N1, LORA_RX, LORA_TX);
+
+  delay(2000);
+
+  // LoRa setup
+  LoRaSerial.println("AT+ADDRESS=2");
+  delay(200);
+  LoRaSerial.println("AT+NETWORKID=5");
+  delay(200);
+  LoRaSerial.println("AT+BAND=865000000");
+  delay(200);
+
+  // WiFi + Blynk
+  WiFi.begin(ssid, pass);
+  Blynk.begin(auth, ssid, pass);
+
+  Serial.println("LoRa Receiver with Blynk Configured");
+}
+
+void loop() {
+  Blynk.run();  // Keep Blynk connection alive
+
+  if (LoRaSerial.available()) {
+    String incoming = LoRaSerial.readStringUntil('\n');
+    incoming.trim(); // Remove any newline/extra spaces
+
+    if (incoming.length() == 0) return;
+
+    Serial.print("Received: ");
+    Serial.println(incoming);
+
+    // Parse value from string
+    int peakValue = incoming.toInt();
+    Serial.print("Peak Value: ");
+    Serial.println(peakValue);
+
+    // Classification + Blynk
+    if (peakValue >= weightThreshold) {
+      Serial.println("→ Classification: OVERWEIGHT");
+      Blynk.virtualWrite(V0, "OVERWEIGHT");
+    } else {
+      Serial.println("→ Classification: UNDERWEIGHT");
+      Blynk.virtualWrite(V0, "UNDERWEIGHT");
+    }
+
+    Serial.println();
+  }
+}
